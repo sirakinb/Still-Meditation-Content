@@ -1,7 +1,8 @@
 #!/bin/bash
 # Generate Day 3 TikTok slides: "What 10 Minutes of Meditation Does to Your Brain"
+[ -f .env ] && export $(grep -v '^#' .env | xargs)
 
-API_KEY="AIzaSyBmX1veSvUoBCHMYUTSGlVwZKHlxZHY7z8"
+API_KEY="${GEMINI_API_KEY}"
 MODEL="gemini-3.1-flash-image-preview"
 ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent"
 OUTPUT_DIR="slides/day3"

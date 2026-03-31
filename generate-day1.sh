@@ -1,8 +1,9 @@
 #!/bin/bash
 # Generate Day 1 TikTok slides for Still: Meditation
 # Uses Gemini 3.1 Flash Image Preview (Nano Banana 2)
+[ -f .env ] && export $(grep -v '^#' .env | xargs)
 
-API_KEY="AIzaSyDpIU_FX8kCO8cOVlu9mf18FSG48-6NirI"
+API_KEY="${GEMINI_API_KEY}"
 MODEL="gemini-3.1-flash-image-preview"
 ENDPOINT="https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent"
 OUTPUT_DIR="slides/day1"
