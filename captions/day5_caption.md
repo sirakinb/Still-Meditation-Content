@@ -8,7 +8,7 @@ You don't need silence. You don't need to sit cross-legged. You don't need 30 mi
 
 Swipe through all 5 — then tell me in the comments: which one were you believing?
 
-Follow @stillmeditation for Day 6: how to actually breathe from your belly (most people have been doing it wrong their whole life).
+Follow @stillmeditation for Day 8.
 
 .
 .
@@ -26,7 +26,7 @@ You don't need silence. You don't need to sit cross-legged. You don't need 30 mi
 
 Swipe through all 5 — then tell me in the comments: which one were you believing?
 
-Follow @stillmeditation.app for Day 6: how to actually breathe from your belly (most people have been doing it wrong their whole life).
+Follow @stillmeditation.app for Day 8.
 
 .
 .
