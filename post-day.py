@@ -174,6 +174,37 @@ def main():
     print("\n=== Summary ===")
     for p, r in results.items():
         print(f"  {p:<10} {r.get('status'):<10} id={r.get('id')}")
+
+    # Verify each successful post has populated platform_data
+    # (prevents the "posted but invisible" failure mode)
+    print("\n=== Platform delivery verification ===")
+    for plat, r in results.items():
+        if r.get("status") != "posted":
+            continue
+        pr = req("GET", "/post-results",
+                 raw_url=f"{PB}/post-results?post_id={r['id']}")
+        for d in (pr or {}).get("data", []):
+            pd = d.get("platform_data") or {}
+            if pd.get("id"):
+                print(f"  {plat:<10} platform_data ok  ({pd.get('id')[:40]})")
+            else:
+                print(f"  ⚠ {plat:<10} status=posted but NO platform_data — silent delivery failure?")
+
+    # Post-flight checklist — operational steps the user must do AFTER the script
+    print("\n=== Post-flight checklist (do these now) ===")
+    if "tiktok" in results and results["tiktok"].get("status") == "posted":
+        print("  TikTok:")
+        print("    1. Force-quit the TikTok app (swipe up + away from app switcher)")
+        print("    2. Reopen → tap Inbox (bottom right, chat-bubble icon)")
+        print("    3. Find 'Your content from post bridge is ready' → tap → review → Post")
+        print("    NOTE: TikTok's push pipeline silently drops the notification until")
+        print("          you force-restart the app. This is normal — do it every time.")
+    if "instagram" in results and results["instagram"].get("status") == "posted":
+        print("  Instagram: should appear on @stillmeditation.app profile within ~2 min.")
+        print("    If not visible after 5 min, check PostBridge dashboard for 'failed' status.")
+    if "facebook" in results and results["facebook"].get("status") == "posted":
+        print("  Facebook: published to 'Still Meditation' page.")
+
     failed = [p for p, r in results.items() if r.get("status") != "posted"]
     sys.exit(1 if failed else 0)
 
