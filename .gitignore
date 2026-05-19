@@ -4,3 +4,5 @@
 .DS_Store
 slides/.DS_Store
 slides/day1/.DS_Store
+__pycache__/
+scripts/logs/
