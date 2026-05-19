@@ -160,8 +160,16 @@ def post_tiktok_draft(api_key: str, account_id: str, caption: str, media_urls: l
     return r.json()
 
 
+IG_CAPTION_LIMIT = 2200  # Meta hard limit; over → "Failed to create carousel container: Caption is too long."
+
+
 def post_instagram(api_key: str, account_id: str, caption: str, media_urls: list[str]) -> dict:
     """Publish carousel live to Instagram feed."""
+    if len(caption) > IG_CAPTION_LIMIT:
+        die(
+            f"Instagram caption is {len(caption)} chars; Meta's limit is {IG_CAPTION_LIMIT}.",
+            f"Trim the '## Instagram' section in the caption file by {len(caption) - IG_CAPTION_LIMIT}+ chars before re-running.",
+        )
     payload = {
         "content": caption,
         "mediaItems": [{"type": "image", "url": u} for u in media_urls],
