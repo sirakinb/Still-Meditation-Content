@@ -21,6 +21,7 @@ import sys
 import time
 from pathlib import Path
 
+
 import requests
 
 REPO_ROOT = Path(__file__).resolve().parent
@@ -162,6 +163,47 @@ def post_tiktok_draft(api_key: str, account_id: str, caption: str, media_urls: l
 
 IG_CAPTION_LIMIT = 2200  # Meta hard limit; over → "Failed to create carousel container: Caption is too long."
 
+TERMINAL_STATUSES = {"published", "failed"}
+POLL_INTERVAL_SEC = 4
+POLL_TIMEOUT_SEC = 240  # 4 min — Meta IG carousel + TikTok inbox usually settle in <60s
+
+
+def wait_for_terminal_status(api_key: str, post_id: str, label: str) -> dict:
+    """Poll GET /v1/posts/{id} until platform[0].status is published or failed.
+
+    Returns the final platform-0 object (with status, error, platformPostUrl, etc.).
+    Calls die() if the post lands in 'failed', or if we time out without a terminal status.
+    """
+    deadline = time.time() + POLL_TIMEOUT_SEC
+    last_status = None
+    while time.time() < deadline:
+        r = requests.get(
+            f"{BASE_URL}/posts/{post_id}",
+            headers=auth_headers(api_key),
+            timeout=15,
+        )
+        if not r.ok:
+            # transient — keep trying
+            time.sleep(POLL_INTERVAL_SEC)
+            continue
+        post = r.json().get("post") or r.json()
+        plats = post.get("platforms") or [{}]
+        plat = plats[0]
+        plat_status = plat.get("status")
+        if plat_status != last_status:
+            print(f"  …{label} status: {plat_status}")
+            last_status = plat_status
+        if plat_status in TERMINAL_STATUSES:
+            if plat_status == "failed":
+                err = plat.get("error") or plat.get("errorMessage") or post.get("error") or "(no error message returned)"
+                die(f"{label} post FAILED on Zernio after upload.", f"Error from Zernio/Meta: {err}")
+            return plat
+        time.sleep(POLL_INTERVAL_SEC)
+    die(
+        f"{label} post did not reach a terminal status within {POLL_TIMEOUT_SEC}s.",
+        f"Last status seen: {last_status}. Check Zernio dashboard manually.",
+    )
+
 
 def post_instagram(api_key: str, account_id: str, caption: str, media_urls: list[str]) -> dict:
     """Publish carousel live to Instagram feed."""
@@ -244,23 +286,30 @@ def main() -> int:
         ig_urls.append(url)
 
     results = {}
+    final_status = {}
 
     if "tiktok" in platforms:
         print("\n--- Creating TikTok draft post (Creator Inbox) ---")
         results["tiktok"] = post_tiktok_draft(api_key, tt_id, tt_caption, tt_urls)
         pid = results["tiktok"].get("post", {}).get("_id") or results["tiktok"].get("_id")
-        print(f"  ✓ TikTok draft created  id={pid}")
+        print(f"  ✓ TikTok draft created  id={pid}  — polling for terminal status…")
+        final_status["tiktok"] = wait_for_terminal_status(api_key, pid, "TikTok")
+        print(f"  ✓ TikTok draft delivered to Creator Inbox  (platformPostId={final_status['tiktok'].get('platformPostId')})")
 
     if "instagram" in platforms:
         print("\n--- Creating Instagram live post ---")
         results["instagram"] = post_instagram(api_key, ig_id, ig_caption, ig_urls)
         pid = results["instagram"].get("post", {}).get("_id") or results["instagram"].get("_id")
-        print(f"  ✓ Instagram post created  id={pid}")
+        print(f"  ✓ Instagram post created  id={pid}  — polling for terminal status…")
+        final_status["instagram"] = wait_for_terminal_status(api_key, pid, "Instagram")
+        print(f"  ✓ Instagram post LIVE  ({final_status['instagram'].get('platformPostUrl')})")
 
     print("\n=== Summary ===")
     for plat, r in results.items():
         pid = r.get("post", {}).get("_id") or r.get("_id") or "?"
-        print(f"  {plat:10s} id={pid}")
+        final = final_status.get(plat, {})
+        url = final.get("platformPostUrl") or final.get("platformPostId") or "(no url)"
+        print(f"  {plat:10s} status=published  zernio_id={pid}  → {url}")
 
     print("\n=== Post-flight checklist ===")
     if "tiktok" in platforms:

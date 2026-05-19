@@ -160,6 +160,11 @@ This posts:
 
 Account IDs are auto-resolved by username match (`@stillmeditation`, `@stillmeditation.app`) so reconnections won't break the run.
 
+The script:
+- Pre-validates IG caption length (must be ≤ 2200 chars) and aborts BEFORE upload if exceeded. If you hit this, trim the `## Instagram` section in the caption file and re-run.
+- After creating each post, polls `GET /v1/posts/{id}` until `platform.status` is `published` or `failed`. A `200 OK` on create is NOT enough — Meta/TikTok can reject the post downstream, and the poller surfaces that error message.
+- Typical wall time: ~30–90 seconds per platform. Max 240s before timeout.
+
 **Facebook is on hold.** PostBridge previously published a Still Meditation FB Page post; that path is paused until a Facebook account is connected to Zernio. Do NOT call `./post-day.py` as a fallback — it would duplicate the TT+IG post via PostBridge.
 
 ## Step 10 — Handle Instagram transient failures
