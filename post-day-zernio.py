@@ -224,17 +224,40 @@ def post_instagram(api_key: str, account_id: str, caption: str, media_urls: list
     return r.json()
 
 
+def post_facebook(api_key: str, account_id: str, caption: str, media_urls: list[str]) -> dict:
+    """Publish a multi-image post live to the Facebook Page feed.
+
+    Facebook supports up to 10 images per post and there are no platform-
+    specific required fields beyond the standard mediaItems + platforms.
+    Caption uses the top-level `content` field. FB's caption ceiling is
+    far above our typical ~2300 chars (63k), so no length guard needed.
+    """
+    payload = {
+        "content": caption,
+        "mediaItems": [{"type": "image", "url": u} for u in media_urls],
+        "platforms": [{"platform": "facebook", "accountId": account_id}],
+        "publishNow": True,
+    }
+    r = requests.post(f"{BASE_URL}/posts", headers=auth_headers(api_key), json=payload, timeout=120)
+    if not r.ok:
+        die(f"Facebook POST /posts failed: {r.status_code}", r.text[:600])
+    return r.json()
+
+
 def main() -> int:
     p = argparse.ArgumentParser()
     p.add_argument("day", type=int, help="Day number (e.g. 47)")
-    p.add_argument("--platforms", default="tiktok,instagram",
-                   help="Comma-separated: tiktok,instagram (default both)")
+    p.add_argument("--platforms", default="tiktok,instagram,facebook",
+                   help="Comma-separated: tiktok,instagram,facebook (default all three)")
     p.add_argument("--ig-account-id", default=None, help="Override Instagram account id")
     p.add_argument("--tt-account-id", default=None, help="Override TikTok account id")
+    p.add_argument("--fb-account-id", default=None, help="Override Facebook Page account id")
     p.add_argument("--ig-username", default="stillmeditation.app",
                    help="Instagram username to match (default: stillmeditation.app)")
     p.add_argument("--tt-username", default="stillmeditation",
                    help="TikTok username to match (default: stillmeditation)")
+    p.add_argument("--fb-username", default="Still Meditation",
+                   help="Facebook Page name/username to match (default: Still Meditation)")
     args = p.parse_args()
 
     env = load_env()
@@ -243,19 +266,22 @@ def main() -> int:
         die("ZERNIO_API_KEY missing from .env")
 
     platforms = [x.strip().lower() for x in args.platforms.split(",") if x.strip()]
-    unknown = set(platforms) - {"tiktok", "instagram"}
+    unknown = set(platforms) - {"tiktok", "instagram", "facebook"}
     if unknown:
-        die(f"unknown platform(s): {unknown}. Only tiktok and instagram are supported here.")
+        die(f"unknown platform(s): {unknown}. Supported: tiktok, instagram, facebook.")
 
     # Resolve account ids
     accounts = list_accounts(api_key)
     tt_id = args.tt_account_id
     ig_id = args.ig_account_id
+    fb_id = args.fb_account_id
     if "tiktok" in platforms and not tt_id:
         tt_id = find_account(accounts, "tiktok", args.tt_username)
     if "instagram" in platforms and not ig_id:
         ig_id = find_account(accounts, "instagram", args.ig_username)
-    print(f"Account IDs → TikTok={tt_id}  Instagram={ig_id}")
+    if "facebook" in platforms and not fb_id:
+        fb_id = find_account(accounts, "facebook", args.fb_username)
+    print(f"Account IDs → TikTok={tt_id}  Instagram={ig_id}  Facebook={fb_id}")
 
     # Slides
     slide_dir = REPO_ROOT / "slides" / f"day{args.day}"
@@ -264,26 +290,38 @@ def main() -> int:
 
     tt_slides = sorted([slide_dir / f"slide{i}.png" for i in range(1, 8)])
     ig_slides = [slide_dir / f"slide{i}.png" for i in range(1, 7)] + [slide_dir / "slide7_instagram.png"]
-    for s in tt_slides + ig_slides:
+    # Facebook Page is self-branded — reuse the TikTok slide 7 (says @stillmeditation,
+    # which is fine as a cross-platform brand reference and avoids generating an extra slide).
+    fb_slides = tt_slides
+    needed = set(tt_slides) | set(ig_slides) | set(fb_slides)
+    for s in needed:
         if not s.exists() or s.stat().st_size < 10000:
             die(f"slide missing or too small: {s}")
 
     tt_caption, ig_caption = load_caption(args.day)
+    # FB has no in-file section; reuse the IG caption (already trimmed for Meta).
+    fb_caption = ig_caption
 
-    # Upload (each variant separately; slide7 differs across TT vs IG)
-    print("\n--- Uploading TikTok slides ---")
-    tt_urls = []
-    for s in tt_slides:
-        url = upload_slide(api_key, s)
-        print(f"  ✓ {s.name} → {url}")
-        tt_urls.append(url)
+    # Upload only the slide sets the requested platforms need
+    tt_urls: list[str] = []
+    ig_urls: list[str] = []
+    fb_urls: list[str] = []
 
-    print("\n--- Uploading Instagram slides ---")
-    ig_urls = []
-    for s in ig_slides:
-        url = upload_slide(api_key, s)
-        print(f"  ✓ {s.name} → {url}")
-        ig_urls.append(url)
+    if "tiktok" in platforms or "facebook" in platforms:
+        # TT and FB share the same slide set; upload once and reuse.
+        print("\n--- Uploading TikTok/Facebook slides (shared) ---")
+        for s in tt_slides:
+            url = upload_slide(api_key, s)
+            print(f"  ✓ {s.name} → {url}")
+            tt_urls.append(url)
+        fb_urls = tt_urls
+
+    if "instagram" in platforms:
+        print("\n--- Uploading Instagram slides ---")
+        for s in ig_slides:
+            url = upload_slide(api_key, s)
+            print(f"  ✓ {s.name} → {url}")
+            ig_urls.append(url)
 
     results = {}
     final_status = {}
@@ -304,6 +342,14 @@ def main() -> int:
         final_status["instagram"] = wait_for_terminal_status(api_key, pid, "Instagram")
         print(f"  ✓ Instagram post LIVE  ({final_status['instagram'].get('platformPostUrl')})")
 
+    if "facebook" in platforms:
+        print("\n--- Creating Facebook live post (Still Meditation Page) ---")
+        results["facebook"] = post_facebook(api_key, fb_id, fb_caption, fb_urls)
+        pid = results["facebook"].get("post", {}).get("_id") or results["facebook"].get("_id")
+        print(f"  ✓ Facebook post created  id={pid}  — polling for terminal status…")
+        final_status["facebook"] = wait_for_terminal_status(api_key, pid, "Facebook")
+        print(f"  ✓ Facebook post LIVE  ({final_status['facebook'].get('platformPostUrl') or final_status['facebook'].get('platformPostId')})")
+
     print("\n=== Summary ===")
     for plat, r in results.items():
         pid = r.get("post", {}).get("_id") or r.get("_id") or "?"
@@ -318,7 +364,9 @@ def main() -> int:
         print("    2. Reopen → tap Inbox (bottom right)")
         print("    3. Find the Zernio draft notification → tap → review → Post")
     if "instagram" in platforms:
-        print("  Instagram: should appear on @stillmeditation.app feed within ~2 min.")
+        print("  Instagram: live on @stillmeditation.app.")
+    if "facebook" in platforms:
+        print("  Facebook: live on the Still Meditation Page.")
 
     return 0
 

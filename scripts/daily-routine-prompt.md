@@ -151,21 +151,30 @@ Run the regen script. Re-inspect just the regenerated slides. If still broken af
 ```bash
 cd /Users/sirakinb/Still-Meditation-Content
 export $(grep -v '^#' .env | xargs)
-python3 post-day-zernio.py N --platforms tiktok,instagram
+python3 post-day-zernio.py N
 ```
 
-This posts:
+This posts to all three platforms by default:
 - TikTok → Creator Inbox draft (`tiktokSettings.draft: true` at top level)
 - Instagram → live on @stillmeditation.app
+- Facebook → live on the Still Meditation Page
 
-Account IDs are auto-resolved by username match (`@stillmeditation`, `@stillmeditation.app`) so reconnections won't break the run.
+Account IDs are auto-resolved by username/page-name match (`@stillmeditation`, `@stillmeditation.app`, `Still Meditation`) so reconnections won't break the run.
 
 The script:
-- Pre-validates IG caption length (must be ≤ 2200 chars) and aborts BEFORE upload if exceeded. If you hit this, trim the `## Instagram` section in the caption file and re-run.
+- Pre-validates IG caption length (must be ≤ 2200 chars) and aborts BEFORE upload if exceeded. If you hit this, trim the `## Instagram` section in the caption file and re-run. Facebook reuses the Instagram caption, so the same trim covers both.
 - After creating each post, polls `GET /v1/posts/{id}` until `platform.status` is `published` or `failed`. A `200 OK` on create is NOT enough — Meta/TikTok can reject the post downstream, and the poller surfaces that error message.
+- Reuses the TikTok slide set for Facebook (no separate `slide7_facebook` is generated; the FB Page is self-branded so the @stillmeditation handle on slide 7 is fine).
 - Typical wall time: ~30–90 seconds per platform. Max 240s before timeout.
 
-**Facebook is on hold.** PostBridge previously published a Still Meditation FB Page post; that path is paused until a Facebook account is connected to Zernio. Do NOT call `./post-day.py` as a fallback — it would duplicate the TT+IG post via PostBridge.
+To post only a subset (e.g. retrying a single platform), use `--platforms`:
+
+```bash
+python3 post-day-zernio.py N --platforms instagram      # IG only
+python3 post-day-zernio.py N --platforms tiktok,facebook  # skip IG
+```
+
+**Do NOT fall back to `./post-day.py` (PostBridge)** — it would duplicate posts.
 
 ## Step 10 — Handle Instagram transient failures
 
