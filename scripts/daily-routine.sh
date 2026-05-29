@@ -46,15 +46,25 @@ cd "${REPO}"
 #   --model sonnet                  : capable, cost-reasonable
 #   --max-budget-usd 5              : hard cap per run (~10x typical cost)
 #   --add-dir REPO                  : already cwd, but be explicit
-"${CLAUDE_BIN}" \
+#
+# IMPORTANT: --add-dir is VARIADIC in claude CLI 2.x — it eats any positional
+# args that follow it, including a prompt string. Passing the prompt as a
+# positional after --add-dir results in claude waiting on stdin forever under
+# launchd (where stdin is /dev/null), producing zero output and never exiting.
+# Pipe the prompt via stdin instead.
+#
+# Also wrap the whole thing in a hard timeout so a future hang can't sit
+# alive for days again.
+perl -e 'alarm 1800; exec @ARGV' \
+  "${CLAUDE_BIN}" \
   -p \
   --dangerously-skip-permissions \
   --model sonnet \
   --max-budget-usd 5 \
   --add-dir "${REPO}" \
-  "$(cat "${PROMPT_FILE}")" \
+  < "${PROMPT_FILE}" \
   >> "${LOG_FILE}" 2>&1 \
-  || echo "[$(date)] Claude exited with non-zero status $?" >> "${LOG_FILE}"
+  || echo "[$(date)] Claude exited with non-zero status $? (perl alarm = SIGALRM 14)" >> "${LOG_FILE}"
 
 {
   echo ""
