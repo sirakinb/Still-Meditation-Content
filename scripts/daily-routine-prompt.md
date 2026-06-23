@@ -154,8 +154,8 @@ export $(grep -v '^#' .env | xargs)
 python3 post-day-zernio.py N
 ```
 
-This posts to all three platforms by default:
-- TikTok → Creator Inbox draft (`tiktokSettings.draft: true` at top level)
+This posts to all three platforms by default — **all three publish live, no manual confirmation step:**
+- TikTok → live on @stillmeditation (with auto-added trending sound for algo boost)
 - Instagram → live on @stillmeditation.app
 - Facebook → live on the Still Meditation Page
 
@@ -207,27 +207,23 @@ Print a clean summary at the end:
 ```
 === Day N — {PILLAR} {Title} ===
 Slides:    {count} regen pass(es) needed
-TikTok:    posted to drafts inbox (post id {id})
-Instagram: published live to @stillmeditation.app (post id {id})
-
-⚠ MANUAL STEP REQUIRED:
-   Force-quit the TikTok app (swipe up + away from app switcher),
-   reopen → tap Inbox (chat bubble bottom-right),
-   find the Zernio draft notification,
-   tap → review → Post.
-   (TikTok's push pipeline silently drops the notification until you force-restart.)
+TikTok:    live on @stillmeditation (post id {id})
+Instagram: live on @stillmeditation.app (post id {id})
+Facebook:  live on Still Meditation Page (post id {id})
 
 Warnings: {any flags, e.g. slide-N still has typo "X" after 3 regens}
 ```
 
+No manual step required — all three platforms publish directly.
+
 ## Critical context (do not skip)
 
 - Posting is via **Zernio** (`post-day-zernio.py`), not PostBridge. PostBridge stays installed as a manual emergency fallback only; do not auto-invoke it.
-- TikTok MUST go to drafts. `post-day-zernio.py` sets `tiktokSettings.draft: true` at the top level of the request body (TikTok is a special case in Zernio — its settings are NOT inside `platformSpecificData`). It also sets the legally-required `content_preview_confirmed: true` and `express_consent_given: true`. Do not override.
-- Instagram publishes live. No draft flag.
+- TikTok publishes LIVE directly to @stillmeditation. `post-day-zernio.py` sets `tiktokSettings` at the top level of the request body (TikTok is a special case in Zernio — its settings are NOT inside `platformSpecificData`). It includes the legally-required `content_preview_confirmed: true` and `express_consent_given: true` flags and `auto_add_music: true` for trending-sound algo boost. Do NOT add `draft: true` — that's the old behavior, the user explicitly switched to direct publish on 2026-06-23.
+- Instagram and Facebook publish live. No draft flag for any platform.
 - Zernio account IDs are stable per-connection, but the script still auto-resolves them by username match (`@stillmeditation`, `@stillmeditation.app`) every run — so a reconnect that changes the id won't break it.
 - Gemini key in `.env` as `GEMINI_API_KEY`. Zernio key as `ZERNIO_API_KEY` (starts with `sk_`). Both required. `POST_BRIDGE_API_KEY` is kept for emergency-only manual use.
 - Never commit `.env`. It's in `.gitignore`.
-- Never run probe/test posts to real accounts — Instagram publishes instantly and can't be deleted via API. Use a TikTok-only draft run if you need to validate plumbing.
+- Never run probe/test posts to real accounts — all three platforms publish instantly and IG/FB can't be deleted via API. If you need to validate plumbing, only call `python3 post-day-zernio.py --help` or `python3 -c 'from importlib import import_module; m=import_module("post-day-zernio"); print(m.list_accounts(m.load_env()["ZERNIO_API_KEY"]))'` — never trigger an actual post.
 
 Begin now. Work efficiently — each day takes ~10–15 minutes including regens.

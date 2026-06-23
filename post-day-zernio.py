@@ -137,8 +137,8 @@ def short_title_from_caption(caption: str, max_len: int = 90) -> str:
     return f"Still Meditation"
 
 
-def post_tiktok_draft(api_key: str, account_id: str, caption: str, media_urls: list[str]) -> dict:
-    """Send carousel to TikTok Creator Inbox as a draft (user reviews & publishes manually)."""
+def post_tiktok(api_key: str, account_id: str, caption: str, media_urls: list[str]) -> dict:
+    """Publish carousel live to TikTok feed (no draft / no Creator Inbox)."""
     payload = {
         "content": short_title_from_caption(caption),  # max 90 chars, becomes carousel title
         "mediaItems": [{"type": "image", "url": u} for u in media_urls],
@@ -148,10 +148,11 @@ def post_tiktok_draft(api_key: str, account_id: str, caption: str, media_urls: l
             "allow_comment": True,
             "media_type": "photo",
             "photo_cover_index": 0,
-            "description": caption,  # full caption, up to 4000 chars
-            "content_preview_confirmed": True,  # legal required
-            "express_consent_given": True,       # legal required
-            "draft": True,                       # ← TikTok Creator Inbox
+            "description": caption,        # full caption, up to 4000 chars
+            "content_preview_confirmed": True,  # legal required — author has previewed
+            "express_consent_given": True,      # legal required — author has consented
+            "auto_add_music": True,             # let TikTok pick a trending sound (algo boost)
+            # NOTE: no 'draft: true' — posts go live directly to @stillmeditation feed.
         },
         "publishNow": True,
     }
@@ -327,12 +328,12 @@ def main() -> int:
     final_status = {}
 
     if "tiktok" in platforms:
-        print("\n--- Creating TikTok draft post (Creator Inbox) ---")
-        results["tiktok"] = post_tiktok_draft(api_key, tt_id, tt_caption, tt_urls)
+        print("\n--- Creating TikTok live post ---")
+        results["tiktok"] = post_tiktok(api_key, tt_id, tt_caption, tt_urls)
         pid = results["tiktok"].get("post", {}).get("_id") or results["tiktok"].get("_id")
-        print(f"  ✓ TikTok draft created  id={pid}  — polling for terminal status…")
+        print(f"  ✓ TikTok post created  id={pid}  — polling for terminal status…")
         final_status["tiktok"] = wait_for_terminal_status(api_key, pid, "TikTok")
-        print(f"  ✓ TikTok draft delivered to Creator Inbox  (platformPostId={final_status['tiktok'].get('platformPostId')})")
+        print(f"  ✓ TikTok post LIVE  (platformPostId={final_status['tiktok'].get('platformPostId')})")
 
     if "instagram" in platforms:
         print("\n--- Creating Instagram live post ---")
@@ -357,12 +358,9 @@ def main() -> int:
         url = final.get("platformPostUrl") or final.get("platformPostId") or "(no url)"
         print(f"  {plat:10s} status=published  zernio_id={pid}  → {url}")
 
-    print("\n=== Post-flight checklist ===")
+    print("\n=== Post-flight ===")
     if "tiktok" in platforms:
-        print("  TikTok:")
-        print("    1. Force-quit the TikTok app (swipe up + away from app switcher)")
-        print("    2. Reopen → tap Inbox (bottom right)")
-        print("    3. Find the Zernio draft notification → tap → review → Post")
+        print("  TikTok: live on @stillmeditation (no manual step needed).")
     if "instagram" in platforms:
         print("  Instagram: live on @stillmeditation.app.")
     if "facebook" in platforms:
